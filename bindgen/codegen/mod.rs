@@ -267,6 +267,12 @@ struct CodegenResult<'a> {
     functions_seen: HashSet<String>,
     vars_seen: HashSet<String>,
 
+    /// Tracked type alias names.
+    type_aliases_seen: HashSet<String>,
+
+    /// Tracked function names emitted.
+    function_names_seen: HashSet<String>,
+
     /// Used for making bindings to overloaded functions. Maps from a canonical
     /// function name to the number of overloads we have already codegen'd for
     /// that name. This lets us give each overload a unique suffix.
@@ -275,6 +281,7 @@ struct CodegenResult<'a> {
     /// List of items to serialize. With optionally the argument for the wrap as
     /// variadic transformation to be applied.
     items_to_serialize: Vec<(ItemId, Option<WrapAsVariadic>)>,
+
 }
 
 impl<'a> CodegenResult<'a> {
@@ -291,6 +298,8 @@ impl<'a> CodegenResult<'a> {
             items_seen: Default::default(),
             functions_seen: Default::default(),
             vars_seen: Default::default(),
+            type_aliases_seen: Default::default(),
+            function_names_seen: Default::default(),
             overload_counters: Default::default(),
             items_to_serialize: Default::default(),
         }
@@ -352,6 +361,22 @@ impl<'a> CodegenResult<'a> {
 
     fn saw_var(&mut self, name: &str) {
         self.vars_seen.insert(name.into());
+    }
+
+    fn seen_type_alias(&self, name: &str) -> bool {
+        self.type_aliases_seen.contains(name)
+    }
+
+    fn saw_type_alias(&mut self, name: &str) {
+        self.type_aliases_seen.insert(name.into());
+    }
+
+    fn seen_function_name(&self, name: &str) -> bool {
+        self.function_names_seen.contains(name)
+    }
+
+    fn saw_function_name(&mut self, name: &str) {
+        self.function_names_seen.insert(name.into());
     }
 
     fn inner<F>(&mut self, cb: F) -> Vec<proc_macro2::TokenStream>
@@ -1020,6 +1045,17 @@ impl CodeGenerator for Type {
                         return;
                     }
                 }
+
+                // Skip a type alias whose name has already been emitted at this
+                // scope. C++ member typedefs of distinct template instantiations
+                // (e.g. `rangeset_t::iterator` and `ivlset_t::iterator`) can be
+                // surfaced with the same bare name, which would be a duplicate
+                // definition in Rust. Mirrors the `functions_seen`/`vars_seen`
+                // handling for redeclared functions and variables.
+                if result.seen_type_alias(&name) {
+                    return;
+                }
+                result.saw_type_alias(&name);
 
                 let rust_name = ctx.rust_ident(&name);
 
@@ -4767,6 +4803,10 @@ impl CodeGenerator for Function {
         if times_seen > 0 {
             write!(&mut canonical_name, "{times_seen}").unwrap();
         }
+        if result.seen_function_name(&canonical_name) {
+            return None;
+        }
+        result.saw_function_name(&canonical_name);
         ctx.options().for_each_callback(|cb| {
             cb.new_item_found(
                 id,
