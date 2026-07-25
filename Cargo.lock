@@ -71,7 +71,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "autocxx-bindgen"
+name = "autocxx-bindgen-idalib"
 version = "0.73.0"
 dependencies = [
  "annotate-snippets",
@@ -95,7 +95,7 @@ dependencies = [
 name = "bindgen-tests"
 version = "0.1.0"
 dependencies = [
- "autocxx-bindgen",
+ "autocxx-bindgen-idalib",
  "owo-colors",
  "prettyplease",
  "proc-macro2",
